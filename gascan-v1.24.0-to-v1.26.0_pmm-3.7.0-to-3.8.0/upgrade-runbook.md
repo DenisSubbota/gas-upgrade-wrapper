@@ -56,7 +56,7 @@ What it does, in order — each step has an equivalent manual section below:
 
 1. **SN + Slack gate** — prints the ServiceNow variables to set (`gascan_version=v1.26.0`, `tools_gas_version=v1.26.0`, `pmm_version=3.8.0`) and the customer Slack text, then waits for your confirmation. The only manual stop; `--batch` confirms here and runs the rest unattended.
 2. **Download gascan** — fetches the `v1.26.0` binary for the monitor's OS (auto-detected, both mirrors).
-3. **Inventory gate** — refreshes inventory and asserts `gascan_version` / `tools_gas_version` / `pmm_version` match SN, retrying flaky CDBAng refreshes before it lets the playbooks run.
+3. **Inventory gate** — refreshes inventory and **waits** for `gascan_version` / `tools_gas_version` / `pmm_version` to match SN, polling every 30s for up to ~12 min (SN edits can lag several minutes after you save them) before it lets the playbooks run. On timeout it shows what's still stale and offers a manual re-check.
 4–7. **Playbooks** — gas-tools, alerting-only, PMM server, then PMM client, prompting before each (auto under `--batch`).
 8. **Tracker reminder** — prints the PMM tracker link to update.
 
@@ -101,7 +101,7 @@ gascan --version | head -n1
 gascan -get-inventory -refresh | egrep "gascan_version|tools_gas_version|pmm_version" | sort | uniq -c
 ```
 
-Expect exactly: `v1.26.0`, `v1.26.0`, `3.8.0`.
+Expect exactly: `v1.26.0`, `v1.26.0`, `3.8.0`. **SN edits propagate with a lag (often several minutes)** — if the refresh still shows the old versions, wait ~30s and re-run it until the values match (the script polls automatically, every 30s up to ~12 min). Do **not** run playbooks on stale values.
 
 ### Customer Slack
 

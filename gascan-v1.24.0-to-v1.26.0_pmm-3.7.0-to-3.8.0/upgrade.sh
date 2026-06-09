@@ -259,40 +259,58 @@ fi
 if ! skip_step 3; then
   step 3 "Refresh + verify inventory (GATE)"
   expect "gascan_version=${EXPECT_GASCAN}, tools_gas_version=${EXPECT_GASTOOLS}, pmm_version=${EXPECT_PMM}"
-  INV_MAX=30; i=0; INV=
-  while :; do
-    INV=$(gascan -get-inventory -refresh 2>&1 || true)
-    if [[ "$INV" != *"CDBAng-Auth-Token"* ]] \
-       && grep -q "gascan_version"    <<<"$INV" \
-       && grep -q "tools_gas_version" <<<"$INV" \
-       && grep -q "pmm_version"       <<<"$INV"; then
-      break
-    fi
-    i=$((i+1)); [ "$i" -ge "$INV_MAX" ] && fail "inventory refresh did not return all version keys after ${INV_MAX} tries" "SN/CDBAng likely unreachable — check the env, then re-run (resume picks up from last step in ${STATE_FILE})"
-    warn "inventory incomplete/unreachable — retry #$i/${INV_MAX}"; sleep 5
-  done
-  assert_one() {
-    local label="$1" want="$2" vals
-    vals=$(printf '%s\n' "$3" | sed '/^$/d' | sort -u)
-    if [ -z "$vals" ]; then
-      fail "${label}: no value found in refreshed inventory" "SN var not set, or refresh returned a partial inventory — re-run after fixing SN"
-    elif [ "$vals" = "$want" ]; then
-      ok "${label} = ${want}"
-    else
-      fail "${label}: shows [$(echo $vals | xargs)], expected ${want}" "fix the SN variable for this env (step 1), then re-run — do NOT deploy on stale/wrong inventory"
-    fi
-  }
+  # SN edits propagate with a lag (often minutes), so POLL the refreshed inventory until all three
+  # versions match the targets — don't hard-fail on the first stale read. An unreachable/partial
+  # refresh (CDBAng) just counts as "not ready yet" and is polled the same way.
+  INV_POLL_INTERVAL=30   # seconds between polls
+  INV_POLL_MAX=24        # 24 × 30s ≈ 12 min auto-poll before falling back to manual recheck
+  INV_POLL_MIN=$(( INV_POLL_INTERVAL * INV_POLL_MAX / 60 ))
+
   mon_var() { gascan -adhoc -- monitors -m debug -a "var=$1" 2>/dev/null \
     | grep -oE "\"$1\":[[:space:]]*\"[^\"]*\"" | sed -E 's/.*:[[:space:]]*"([^"]*)"/\1/'; }
-  mon_gascan=$(mon_var gascan_version)
-  mon_tools=$(mon_var tools_gas_version)
-  fleet_pmm=$(printf '%s\n' "$INV" | grep -oE "\"?pmm_version\"?[[:space:]]*:[[:space:]]*\"?[^\",[:space:]]+" | sed -E 's/.*:[[:space:]]*"?//' | sort -u)
-  note "monitor  gascan_version:    $(echo $mon_gascan | xargs)"
-  note "monitor  tools_gas_version: $(echo $mon_tools  | xargs)"
-  note "fleet    pmm_version:       $(echo $fleet_pmm  | xargs)"
-  assert_one "gascan_version (monitor)"    "${EXPECT_GASCAN}"   "$mon_gascan"
-  assert_one "tools_gas_version (monitor)" "${EXPECT_GASTOOLS}" "$mon_tools"
-  assert_one "pmm_version"                 "${EXPECT_PMM}"      "$fleet_pmm"
+  inv_norm() { printf '%s\n' "$1" | sed '/^$/d' | sort -u | xargs; }
+  # refresh + extract the three versions into globals; succeed only if all match the targets
+  inv_check() {
+    INV=$(gascan -get-inventory -refresh 2>&1 || true)
+    mon_gascan=$(inv_norm "$(mon_var gascan_version || true)")
+    mon_tools=$(inv_norm "$(mon_var tools_gas_version || true)")
+    fleet_pmm=$(inv_norm "$(printf '%s\n' "$INV" | grep -oE "\"?pmm_version\"?[[:space:]]*:[[:space:]]*\"?[^\",[:space:]]+" | sed -E 's/.*:[[:space:]]*"?//' || true)")
+    [ "$mon_gascan" = "${EXPECT_GASCAN}" ] && [ "$mon_tools" = "${EXPECT_GASTOOLS}" ] && [ "$fleet_pmm" = "${EXPECT_PMM}" ]
+  }
+  inv_pending() {   # human-readable diff of what's still off the target
+    local p=""
+    [ "$mon_gascan" != "${EXPECT_GASCAN}" ]   && p+=" gascan_version=[${mon_gascan:-∅}→${EXPECT_GASCAN}]"
+    [ "$mon_tools"  != "${EXPECT_GASTOOLS}" ] && p+=" tools_gas_version=[${mon_tools:-∅}→${EXPECT_GASTOOLS}]"
+    [ "$fleet_pmm"  != "${EXPECT_PMM}" ]      && p+=" pmm_version=[${fleet_pmm:-∅}→${EXPECT_PMM}]"
+    printf '%s' "$p"
+  }
+
+  note "SN edits can lag several minutes — polling the refreshed inventory until it matches (every ${INV_POLL_INTERVAL}s, up to ~${INV_POLL_MIN} min)."
+  i=0
+  while ! inv_check; do
+    if [ "$i" -lt "$INV_POLL_MAX" ]; then
+      i=$((i+1))
+      if [[ "$INV" == *"CDBAng-Auth-Token"* ]]; then
+        warn "inventory refresh unreachable (CDBAng) — retry ${i}/${INV_POLL_MAX} in ${INV_POLL_INTERVAL}s"
+      else
+        warn "SN not propagated yet — retry ${i}/${INV_POLL_MAX} in ${INV_POLL_INTERVAL}s; pending:$(inv_pending)"
+      fi
+      sleep "$INV_POLL_INTERVAL"
+    else
+      note "monitor  gascan_version:    ${mon_gascan:-<none>}  (expect ${EXPECT_GASCAN})"
+      note "monitor  tools_gas_version: ${mon_tools:-<none>}  (expect ${EXPECT_GASTOOLS})"
+      note "fleet    pmm_version:       ${fleet_pmm:-<none>}  (expect ${EXPECT_PMM})"
+      if [ "$BATCH" -eq 1 ] || [ ! -t 0 ]; then
+        fail "inventory still does not match after ~${INV_POLL_MIN} min" "verify the SN variables for this env (step 1) are set to the targets, then re-run — do NOT deploy on stale/wrong inventory"
+      fi
+      warn "still not matching after ~${INV_POLL_MIN} min — confirm the SN vars for this env are saved to the targets."
+      read -rp "   > [Enter to refresh + check once more / Ctrl-C to abort] " _
+    fi
+  done
+
+  note "monitor  gascan_version:    ${mon_gascan}"
+  note "monitor  tools_gas_version: ${mon_tools}"
+  note "fleet    pmm_version:       ${fleet_pmm}"
   ok "inventory GATE passed — safe to deploy"
   state_save 3
 fi
