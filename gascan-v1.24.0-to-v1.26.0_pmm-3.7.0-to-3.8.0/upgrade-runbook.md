@@ -1,6 +1,5 @@
 # Upgrade runbook — gascan + PMM
 
-← Check for details of upgrade [[Test Tracker|gascan v1.24.0-to-v1.26.0 + PMM 3.7.0-to-3.8.0]]
 
 > **Caution (PG / Mongo):** review PostgreSQL and MongoDB upgrade caveats before running.
 >
