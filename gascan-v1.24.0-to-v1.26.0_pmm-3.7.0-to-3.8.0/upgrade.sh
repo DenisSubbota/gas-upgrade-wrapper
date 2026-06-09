@@ -31,7 +31,7 @@ while [ $# -gt 0 ]; do
     -y|--yes|--batch) BATCH_REQUESTED=1 ;;
     -h|--help)
       cat <<EOF
-Usage: $(basename "$0") [--batch]
+Usage: upgrade.sh [--batch]
 
   (default)  Confirm before each playbook and at the ServiceNow gate.
   --batch    Step 1: SN gate + customer Slack (manual). Steps 2–7: no further prompts.
@@ -153,7 +153,7 @@ show_banner() {
   echo "${c_bld}GASCAN + PMM upgrade — ${MON_ENV}${c_rst}"
   echo "   gascan v1.24.0 → ${EXPECT_GASCAN}   gas-tools → ${EXPECT_GASTOOLS}   PMM ${PMM_FROM} → ${EXPECT_PMM}"
   echo "   ${TOTAL_STEPS} steps · typical runtime ~10–15 min (inventory refresh may add retries)"
-  echo "   Run on the monitor: bash $(basename "$0") [--batch]  ·  manual path: upgrade-runbook.md in the run folder"
+  echo "   Run on the monitor: bash upgrade.sh [--batch]  ·  manual path: upgrade-runbook.md in the run folder"
   if [ "$BATCH_REQUESTED" -eq 1 ]; then
     echo "   batch: step 1 waits for SN + customer Slack; steps 2–7 auto after SN confirmed"
   fi
