@@ -64,6 +64,13 @@ if [ -t 1 ]; then
 else
   c_grn=; c_red=; c_ylw=; c_bld=; c_rst=
 fi
+# clickable underlined light-blue hyperlink (OSC 8 + ANSI); plain URL when not a TTY
+if [ -t 1 ]; then
+  __o=$'\033]8;;'; __st=$'\033\\'; __lb=$'\033[4;94m'; __rs=$'\033[0m'
+  hlink() { printf '%s%s%s%s%s%s%s' "$__o" "$1" "$__st" "$__lb" "${2:-$1}" "$__rs" "$__o$__st"; }
+else
+  hlink() { printf '%s' "${2:-$1}"; }
+fi
 step()   { echo; echo "${c_bld}━━━ STEP $1/${TOTAL_STEPS} — $2 ━━━${c_rst}"; }
 expect() { echo "   expect: $1"; }
 ok()     { echo "   ${c_grn}✓${c_rst} $1"; }
@@ -187,12 +194,12 @@ sn_links() {
   local cfg="$HOME/.config/gascan/inventory-config.json" env="$MON_ENV" b
   b="https://percona.service-now.com"
   if [ "$env" = "unknown-env" ]; then
-    echo "Monitor node (gascan_version, tools_gas_version): ${b}/u_cmdb_ci_percona_ms_monitor_list.do  (could not derive env from ${cfg} — filter manually)"
-    echo "Customer Env (pmm_version):                       ${b}/u_cmdb_ci_customer_environment_list.do  (filter manually)"
+    echo "Monitor node (gascan_version, tools_gas_version): $(hlink "${b}/u_cmdb_ci_percona_ms_monitor_list.do")  (could not derive env from ${cfg} — filter manually)"
+    echo "Customer Env (pmm_version):                       $(hlink "${b}/u_cmdb_ci_customer_environment_list.do")  (filter manually)"
     return
   fi
-  echo "Monitor node (gascan_version, tools_gas_version): ${b}/u_cmdb_ci_percona_ms_monitor_list.do?sysparm_query=$(urlenc "name=${env}")"
-  echo "Customer Env (pmm_version):                       ${b}/u_cmdb_ci_customer_environment_list.do?sysparm_query=$(urlenc "u_full_nameSTARTSWITH${env} -")"
+  echo "Monitor node (gascan_version, tools_gas_version): $(hlink "${b}/u_cmdb_ci_percona_ms_monitor_list.do?sysparm_query=$(urlenc "name=${env}")")"
+  echo "Customer Env (pmm_version):                       $(hlink "${b}/u_cmdb_ci_customer_environment_list.do?sysparm_query=$(urlenc "u_full_nameSTARTSWITH${env} -")")"
 }
 
 state_load
@@ -403,7 +410,7 @@ fi
 if ! skip_step 8; then
   step 8 "Done"
   ok "upgrade sequence complete"
-  note "MANUAL: update the PMM tracker -> https://docs.google.com/spreadsheets/d/1Hylu_DSw5YJYBPZbJmajSjTCitN4gm7XllriOCp9jTI/edit?gid=1362692116#gid=1362692116"
+  note "MANUAL: update the PMM tracker -> $(hlink "https://docs.google.com/spreadsheets/d/1Hylu_DSw5YJYBPZbJmajSjTCitN4gm7XllriOCp9jTI/edit?gid=703335876")"
   note "Customer Slack follow-up (optional): confirm PMM ${EXPECT_PMM} upgrade complete — no action required on customer side."
   state_clear
 fi
