@@ -1,6 +1,6 @@
 # Upgrade runbook — gascan + PMM
 
-Owner: Denis Subbota
+← Check for details of upgrade [[Test Tracker|gascan v1.24.0-to-v1.26.0 + PMM 3.7.0-to-3.8.0]]
 
 > **Caution (PG / Mongo):** review PostgreSQL and MongoDB upgrade caveats before running.
 >
@@ -8,32 +8,6 @@ Owner: Denis Subbota
 >
 > **PMM 3.8.0 breaking change (handled):** Grafana 12 notification-policies API — **gascan v1.26.0 (GAS-1190) required**. gascan ≤ v1.25.0 fails alerting (K1).
 > UI-based PMM upgrades deprecated (removed 3.9.0).
-
-## How to run this upgrade
-
-| | **Manual** (below) | **Semi-automated** (`upgrade.sh`) |
-|---|---------------------|-----------------------------------|
-| **Best for** | Single playbook debug, partial re-run | Normal customer upgrade |
-| **Confirm gates** | You decide | Script prompts before each playbook (or `--batch`: SN + Slack in step 1, then auto) |
-| **Resume** | — | Re-run script; state in `/tmp/gascan-upgrade-<env>.state` |
-| **Time** | ~10–15 min | ~10–15 min |
-
-```bash
-# Semi-automated — fetch + run from the wrapper repo, ON the monitor:
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/DenisSubbota/gas-upgrade-wrapper/main/gascan-v1.24.0-to-v1.26.0_pmm-3.7.0-to-3.8.0/upgrade.sh)"
-# unattended after SN confirmed in step 1:
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/DenisSubbota/gas-upgrade-wrapper/main/gascan-v1.24.0-to-v1.26.0_pmm-3.7.0-to-3.8.0/upgrade.sh)" -- --batch
-```
-
-**Do not mix** manual playbooks mid-run with a partial script run unless you know which steps already completed (or `rm /tmp/gascan-upgrade-*.state` and pick one path).
-
-| Script step | Manual section |
-|-------------|----------------|
-| 1 | SN + Slack below |
-| 2 | [Download gascan](#2-download-gascan-binary) |
-| 3 | [Inventory gate](#3-refresh--verify-inventory) |
-| 4–7 | [Playbooks](#playbooks) |
-| 8 | [Tracker spreadsheet](#update-the-pmm-tracker-spreadsheet) |
 
 ## Change log
 
@@ -45,14 +19,34 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/DenisSubbota/gas-upgrade
 
 ---
 
-## Manual path
+## Semi-automated upgrade path
 
-### 1. ServiceNow variables
+```bash
+# Semi-automated — fetch + run from the wrapper repo, ON the monitor:
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/DenisSubbota/gas-upgrade-wrapper/main/gascan-v1.24.0-to-v1.26.0_pmm-3.7.0-to-3.8.0/upgrade.sh)"
 
-- **Monitor:** `gascan_version=v1.26.0`, `tools_gas_version=v1.26.0`
-- **Customer Env:** `pmm_version=3.8.0`
+# unattended after SN confirmed in step 1:
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/DenisSubbota/gas-upgrade-wrapper/main/gascan-v1.24.0-to-v1.26.0_pmm-3.7.0-to-3.8.0/upgrade.sh)" -- --batch
+```
 
-### 2. Download gascan binary
+**Do not mix** manual playbooks mid-run with a partial script run unless you know which steps already completed (or `rm /tmp/gascan-upgrade-*.state` and pick one path).
+
+| Script step | Manual section |
+| --- | --- |
+| 1 | SN + Slack below |
+| 2 | Download gascan |
+| 3 | Inventory gate |
+| 4–7 | Playbooks |
+| 8 | Tracker spreadsheet |
+
+## Manual upgrade path
+
+### 1. Update ServiceNow variables
+
+- **For Monitor:** `gascan_version=v1.26.0`, `tools_gas_version=v1.26.0`
+- **For Customer Env:** `pmm_version=3.8.0`
+
+### 2. Download gascan binary on monitor node
 
 ```bash
 GASCAN_VERSION="v1.26.0" bash -c '
@@ -86,10 +80,10 @@ Expect exactly: `v1.26.0`, `v1.26.0`, `3.8.0`.
 
 ### Customer Slack
 
-Send before PMM upgrade window (also printed in `upgrade.sh` step 1):
+Send before the PMM upgrade window (also printed in `upgrade.sh` step 1):
 
 ```
-Hi team — we will be upgrading PMM from 3.7.0 to 3.8.0 on your monitoring environment.
+@here Hi team — we will be upgrading PMM from 3.7.0 to 3.8.0 on your monitoring environment.
 There is no alerting downtime; alerts continue to route throughout. No action required on
 your side. We'll confirm once complete.
 ```
@@ -103,22 +97,13 @@ time gascan --playbook tools.yaml --override=tools_gas_version=v1.26.0
 gas-tools --version | head -n1
 ```
 
-**GAS-1194:** if version lags after `changed=0` tools run:
-
-```bash
-rm -f ~/bin/gas-tools && ln -s ~/bin/gas-tools_v1.26.0 ~/bin/gas-tools
-gas-tools --version | head -n1
-```
-
-Optional: `PEX_SCRIPT=db_tree.py ~/bin/gas-tools` — MySQL RDS nesting OK; MariaDB may show UNKNOWN-HOST (GAS-1195, warn only).
-
 ### Alerting only
 
 ```bash
 time gascan --playbook pmm-server.yaml --limit=monitors --override=pmm_deploy_using=None
 ```
 
-### PMM server
+### PMM server upgrade only
 
 ```bash
 time gascan --playbook pmm-server.yaml --limit=monitors --skip-tags=alerting --override=pmm_version=3.8.0
@@ -128,14 +113,24 @@ podman ps | grep pmm-server
 ### PMM client
 
 ```bash
+# check version and health of pmm-clients
+gascan -adhoc -- mongodb,mysql,postgresql,ha,monitors -m shell -a '~/pmm/bin/pmm-admin version | grep "^Ver"'
 gascan -adhoc -- mongodb,mysql,postgresql,ha,monitors -m shell -a '~/pmm/bin/pmm-admin list'
+
+# add silence for the pmm-client agent in case any issues appear
 amtool silence add --duration="1h" 'alertname=Percona_MS_NodeAgentDown' --comment='PMM3.8.0 upgrade'
+
+# run pmm-client playbook
 time gascan --playbook pmm-client.yaml --override=pmm_version=3.8.0
+
+# verify state of pmm-clients after upgrade
 gascan -adhoc -- mongodb,mysql,postgresql,ha,monitors -m shell -a '~/pmm/bin/pmm-admin version | grep "^Ver"'
 gascan -adhoc -- mongodb,mysql,postgresql,ha,monitors -m shell -a '~/pmm/bin/pmm-admin list'
 # wait 5–10 min, then: amtool silence expire <id>
 ```
 
 ## Update the PMM tracker spreadsheet
+
+Manual on both paths — step 8 of the semi-automated path just reminds you.
 
 [PMM tracker spreadsheet](https://docs.google.com/spreadsheets/d/1Hylu_DSw5YJYBPZbJmajSjTCitN4gm7XllriOCp9jTI/edit?gid=1362692116#gid=1362692116)
