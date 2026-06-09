@@ -12,9 +12,27 @@
 
 [v1.24.0…v1.26.0](https://github.com/percona/GAS/compare/v1.24.0...v1.26.0)
 
-- automation: [GAS-1190](https://percona.atlassian.net/browse/GAS-1190) notification policies (Grafana 12); [GAS-1080](https://percona.atlassian.net/browse/GAS-1080) client tarball; [GAS-1163](https://percona.atlassian.net/browse/GAS-1163) multi-param alerts; [GAS-1133](https://percona.atlassian.net/browse/GAS-1133) update.yaml; [GAS-1171](https://percona.atlassian.net/browse/GAS-1171)/[GAS-1164](https://percona.atlassian.net/browse/GAS-1164) reports.
-- gas-tools: [GAS-1156](https://percona.atlassian.net/browse/GAS-1156) RDS `db_tree` (MySQL ✅; MariaDB ⚠ [GAS-1195](https://percona.atlassian.net/browse/GAS-1195) warn); [GAS-1160](https://percona.atlassian.net/browse/GAS-1160) inventory plugin.
-- alerts: [GAS-1174](https://percona.atlassian.net/browse/GAS-1174) dual-threshold MySQL threads; [GAS-1147](https://percona.atlassian.net/browse/GAS-1147) MongoDB fragmentation alert.
+**automation**
+- [GAS-1190](https://percona.atlassian.net/browse/GAS-1190) — migrate notification policies from the legacy Alertmanager API to the Grafana 12 provisioning API (PMM 3.8.0). **Headline change** — gates alerting on this release.
+- [GAS-1177](https://percona.atlassian.net/browse/GAS-1177) — fix RDS instances with a shared endpoint prefix failing to register in PMM.
+- [GAS-1080](https://percona.atlassian.net/browse/GAS-1080) — fix the PMM client tarball download being skipped under incomplete conditions.
+- [GAS-998](https://percona.atlassian.net/browse/GAS-998) — adopt the newer Ansible `difference` filter behavior (upgrade preparation).
+- [GAS-1133](https://percona.atlassian.net/browse/GAS-1133) — add the missing `always` tag to the `update.yaml` precheck task.
+- [GAS-1163](https://percona.atlassian.net/browse/GAS-1163) — fix threshold changes for multi-parameter alerts not taking effect.
+- [GAS-1171](https://percona.atlassian.net/browse/GAS-1171) — apply the new Percona branding to health & security reports.
+- [GAS-1164](https://percona.atlassian.net/browse/GAS-1164) — improve report-task error capturing and external-PMM handling.
+
+**gas-tools**
+- [GAS-1156](https://percona.atlassian.net/browse/GAS-1156) — improve AWS RDS topology detection in `db_tree` (MySQL ✅; MariaDB ⚠ [GAS-1195](https://percona.atlassian.net/browse/GAS-1195) warn, not a blocker).
+- [GAS-1160](https://percona.atlassian.net/browse/GAS-1160) — fix the dynamic inventory plugin promoting cluster-level custom payload to host scope.
+
+**alerts**
+- [GAS-1174](https://percona.atlassian.net/browse/GAS-1174) — MySQL alerting improvements: dual-threshold `MySQLTooManyThreadsRunning` (base + RDS).
+- [GAS-1147](https://percona.atlassian.net/browse/GAS-1147) — new `MongoDBHighFragmentedData` alert (rule deploys ✅; `fragmented_mb` metric absent — team follow-up).
+
+**other (CI/docs, no runtime impact)**
+- [GAS-1167](https://percona.atlassian.net/browse/GAS-1167) — auto-update the PR base branch (CI workflow).
+- [GAS-1165](https://percona.atlassian.net/browse/GAS-1165) — document the `/tmp` `noexec` workaround.
 
 ---
 
