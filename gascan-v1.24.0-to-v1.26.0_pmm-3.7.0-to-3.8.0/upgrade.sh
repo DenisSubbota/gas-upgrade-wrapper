@@ -410,7 +410,7 @@ fi
 if ! skip_step 8; then
   step 8 "Done"
   ok "upgrade sequence complete"
-  note "MANUAL: update the PMM tracker -> $(hlink "https://docs.google.com/spreadsheets/d/1Hylu_DSw5YJYBPZbJmajSjTCitN4gm7XllriOCp9jTI/edit?gid=703335876")"
+  note "MANUAL: update the PMM tracker -> $(hlink "https://docs.google.com/spreadsheets/d/1Hylu_DSw5YJYBPZbJmajSjTCitN4gm7XllriOCp9jTI/edit?gid=1362692116#gid=1362692116")"
   note "Customer Slack follow-up (optional): confirm PMM ${EXPECT_PMM} upgrade complete — no action required on customer side."
   state_clear
 fi
