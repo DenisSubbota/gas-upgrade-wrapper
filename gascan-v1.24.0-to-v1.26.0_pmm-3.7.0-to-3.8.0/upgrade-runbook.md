@@ -28,15 +28,17 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/DenisSubbota/gas-upgrade
 bash -c "$(curl -fsSL https://raw.githubusercontent.com/DenisSubbota/gas-upgrade-wrapper/main/gascan-v1.24.0-to-v1.26.0_pmm-3.7.0-to-3.8.0/upgrade.sh)" -- --batch
 ```
 
-**Do not mix** manual playbooks mid-run with a partial script run unless you know which steps already completed (or `rm /tmp/gascan-upgrade-*.state` and pick one path).
+What it does, in order — each step has an equivalent manual section below:
 
-| Script step | Manual section |
-| --- | --- |
-| 1 | SN + Slack below |
-| 2 | Download gascan |
-| 3 | Inventory gate |
-| 4–7 | Playbooks |
-| 8 | Tracker spreadsheet |
+1. **SN + Slack gate** — prints the ServiceNow variables to set (`gascan_version=v1.26.0`, `tools_gas_version=v1.26.0`, `pmm_version=3.8.0`) and the customer Slack text, then waits for your confirmation. The only manual stop; `--batch` confirms here and runs the rest unattended.
+2. **Download gascan** — fetches the `v1.26.0` binary for the monitor's OS (auto-detected, both mirrors).
+3. **Inventory gate** — refreshes inventory and asserts `gascan_version` / `tools_gas_version` / `pmm_version` match SN, retrying flaky CDBAng refreshes before it lets the playbooks run.
+4–7. **Playbooks** — gas-tools, alerting-only, PMM server, then PMM client, prompting before each (auto under `--batch`).
+8. **Tracker reminder** — prints the PMM tracker link to update.
+
+**Resume:** re-run the same command; completed steps are skipped (state in `/tmp/gascan-upgrade-<env>.state`). Start over with `rm /tmp/gascan-upgrade-*.state`.
+
+**Do not mix** manual playbooks mid-run with a partial script run — pick one path (or `rm` the state file first).
 
 ## Manual upgrade path
 
