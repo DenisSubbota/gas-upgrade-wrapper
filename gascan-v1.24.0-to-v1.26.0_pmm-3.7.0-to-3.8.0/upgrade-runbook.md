@@ -18,6 +18,12 @@
 
 ---
 
+## Prerequisites (both paths)
+
+- Target versions in ServiceNow **before** inventory refresh: gascan `v1.26.0`, gas-tools `v1.26.0`, PMM `3.8.0`.
+- Run on the **monitor node**.
+- PMM ≥3.8.0 requires gascan ≥v1.26.0 (GAS-1190 notification policies / Grafana 12).
+
 ## Semi-automated upgrade path
 
 ```bash
