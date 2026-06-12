@@ -103,6 +103,9 @@ run_playbook() {
   local stepno="$1"; shift
   local log="/tmp/gascan-upgrade-${MON_ENV}-step${stepno}.log"
   local rc recap bad line ans
+  # pmm-client.yaml needs the monitor in any --limit (it templates client config from monitor facts)
+  local lim="--limit=<host>"
+  case "$*" in *pmm-client.yaml*) lim="--limit=<host>,monitors" ;; esac
   while :; do
     rc=0
     time gascan "$@" 2>&1 | tee "$log" || rc=$?
@@ -126,7 +129,7 @@ run_playbook() {
       echo "       - check it yourself:  gascan -adhoc -- <host> -m ping   (or: ssh <host>)"
       echo "       - node down / maintenance / decommissioned? confirm with the team; if it is"
       echo "         EXPECTED to be away → choose [c] continue, then once it is back run:"
-      echo "           gascan $* --limit=<host>"
+      echo "           gascan $* ${lim}"
       echo "       - transient network/SSH blip → choose [r] retry (completed hosts re-converge fast)"
       note "failed=N → a real task failure on that host — read its task error above before deciding."
     fi
@@ -141,7 +144,7 @@ run_playbook() {
     case "$ans" in
       r|R) note "retrying playbook…" ;;
       c|C)
-        warn "continuing — host(s) above were NOT upgraded; once resolved, re-run: gascan $* --limit=<host>"
+        warn "continuing — host(s) above were NOT upgraded; once resolved, re-run: gascan $* ${lim}"
         return 0 ;;
       *) fail "aborted by operator at step ${stepno}" "fix the host, then re-run upgrade.sh — resume skips completed steps" ;;
     esac
