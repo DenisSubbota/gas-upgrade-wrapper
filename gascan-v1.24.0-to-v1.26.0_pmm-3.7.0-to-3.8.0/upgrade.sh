@@ -92,6 +92,62 @@ manual_gate() {
   read -rp "   Applied in SN? [Enter to continue] " _
 }
 
+# ---------------------------------------------------------------------------
+# run_playbook <step#> <gascan args…> — run a playbook and judge the PLAY RECAP
+# per host (gascan's aggregate exit code is non-zero on ANY ansible issue, so it
+# alone can't tell "one node unreachable" from "deploy broken"). On problem
+# hosts it prints triage guidance and gates on the operator: retry / continue
+# without the host / abort. Failures ALWAYS gate, even under --batch.
+# ---------------------------------------------------------------------------
+run_playbook() {
+  local stepno="$1"; shift
+  local log="/tmp/gascan-upgrade-${MON_ENV}-step${stepno}.log"
+  local rc recap bad line ans
+  while :; do
+    rc=0
+    time gascan "$@" 2>&1 | tee "$log" || rc=$?
+    recap=$(grep -E '^[A-Za-z0-9][A-Za-z0-9._-]*[[:space:]]*:[[:space:]]*ok=[0-9]' "$log" || true)
+    bad=$(printf '%s\n' "$recap" | grep -E 'unreachable=[1-9]|failed=[1-9]' || true)
+    if [ -n "$recap" ] && [ -z "$bad" ]; then
+      [ "$rc" -ne 0 ] && note "gascan exited ${rc} but every host's PLAY RECAP is clean — recap is authoritative, proceeding"
+      return 0
+    fi
+    echo
+    if [ -z "$recap" ]; then
+      warn "playbook exited ${rc} before any PLAY RECAP — env/auth/inventory problem, not a host failure"
+      note "full output: ${log}"
+      note "triage: read the error above; common checks: gascan -get-inventory -refresh, VPN up, ~/.config/gascan/* present"
+    else
+      warn "playbook finished with PROBLEM HOST(S) (gascan exit ${rc}) — everything else completed:"
+      printf '%s\n' "$bad" | while IFS= read -r line; do echo "       ${c_red}${line}${c_rst}"; done
+      note "full output: ${log}"
+      echo
+      note "unreachable=N → the node did not answer SSH. What to do:"
+      echo "       - check it yourself:  gascan -adhoc -- <host> -m ping   (or: ssh <host>)"
+      echo "       - node down / maintenance / decommissioned? confirm with the team; if it is"
+      echo "         EXPECTED to be away → choose [c] continue, then once it is back run:"
+      echo "           gascan $* --limit=<host>"
+      echo "       - transient network/SSH blip → choose [r] retry (completed hosts re-converge fast)"
+      note "failed=N → a real task failure on that host — read its task error above before deciding."
+    fi
+    echo
+    # plain `ssh mon 'bash -c …'` has no TTY but stdin still reaches the operator — so
+    # always TRY to ask; only EOF (stdin closed, e.g. curl|bash) hard-fails with the resume hint.
+    if ! read -rp "   > [r] retry playbook   [c] continue WITHOUT the problem host(s)   [a] abort : " ans; then
+      echo
+      fail "step ${stepno} playbook needs an operator decision and stdin is closed" \
+           "re-run upgrade.sh interactively — resume skips the completed steps"
+    fi
+    case "$ans" in
+      r|R) note "retrying playbook…" ;;
+      c|C)
+        warn "continuing — host(s) above were NOT upgraded; once resolved, re-run: gascan $* --limit=<host>"
+        return 0 ;;
+      *) fail "aborted by operator at step ${stepno}" "fix the host, then re-run upgrade.sh — resume skips completed steps" ;;
+    esac
+  done
+}
+
 batch_activate() {
   if [ "$BATCH_REQUESTED" -ne 1 ] || [ "$BATCH" -eq 1 ]; then return 0; fi
   BATCH=1
@@ -329,7 +385,7 @@ if ! skip_step 4; then
     pb=(--playbook tools.yaml --override=tools_gas_version="${EXPECT_GASTOOLS}")
     cmd "gascan ${pb[*]}"
     confirm "Upgrade gas-tools ${cur_tools:-<none>} -> ${EXPECT_GASTOOLS}?"
-    time gascan "${pb[@]}"
+    run_playbook 4 "${pb[@]}"
     got=$(gas-tools --version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)
     note "gas-tools --version: ${got:-<unknown>}"
     case "$got" in
@@ -356,7 +412,7 @@ if ! skip_step 5; then
   pb=(--playbook pmm-server.yaml --limit=monitors --override=pmm_deploy_using=None)
   cmd "gascan ${pb[*]}"
   confirm "Update alerting (no server upgrade)?"
-  time gascan "${pb[@]}"
+  run_playbook 5 "${pb[@]}"
   ok "alerting updated"
   state_save 5
 fi
@@ -375,7 +431,7 @@ if ! skip_step 6; then
     pb=(--playbook pmm-server.yaml --limit=monitors --skip-tags=alerting --override=pmm_version="${EXPECT_PMM}")
     cmd "gascan ${pb[*]}"
     confirm "Upgrade PMM server ${cur_server:-<unknown>} -> ${EXPECT_PMM}?"
-    time gascan "${pb[@]}"
+    run_playbook 6 "${pb[@]}"
     if podman ps | grep -q pmm-server; then ok "pmm-server container running"; else warn "pmm-server not visible in 'podman ps' — investigate before continuing"; fi
     podman ps --format '{{.Names}} {{.Image}} {{.Status}}' | grep -i pmm-server || true
   fi
@@ -402,7 +458,7 @@ if ! skip_step 7; then
     silence_id=$(amtool silence query -q 'alertname=Percona_MS_NodeAgentDown' 2>/dev/null | head -n1 || true)
     if [ -n "$silence_id" ]; then ok "NodeAgentDown silenced (id: ${silence_id})"
     else warn "could not read back a NodeAgentDown silence id — check 'amtool silence' manually"; fi
-    time gascan "${pb[@]}"
+    run_playbook 7 "${pb[@]}"
     note "client services AFTER upgrade (compare vs BEFORE — all should be present, version ${EXPECT_PMM}):"
     gascan -adhoc -- mongodb,mysql,postgresql,ha,monitors -m shell -a '~/pmm/bin/pmm-admin version | grep "^Ver"' 2>/dev/null || true
     gascan -adhoc -- mongodb,mysql,postgresql,ha,monitors -m shell -a '~/pmm/bin/pmm-admin list' 2>/dev/null || true
