@@ -203,9 +203,9 @@ EOF
 state_clear() { rm -f "$STATE_FILE"; }
 
 skip_step() {
-  local n="$1"
+  local n="$1" title="${2:-}"
   if [ "${LAST_COMPLETED:-0}" -ge "$n" ]; then
-    ok "step ${n}/${TOTAL_STEPS} already completed — skipping (resume)"
+    ok "step ${n}/${TOTAL_STEPS} — ${title} · already completed (resume)"
     return 0
   fi
   return 1
@@ -265,7 +265,7 @@ show_banner
 # ---------------------------------------------------------------------------
 # 1. ServiceNow variable changes (manual)
 # ---------------------------------------------------------------------------
-if ! skip_step 1; then
+if ! skip_step 1 "ServiceNow variables"; then
   step 1 "ServiceNow variables"
   note "Open the SN CMDB records for THIS env (Monitor node + Customer Env are separate records):"
   sn_links | while IFS= read -r l; do echo "     $l"; done
@@ -278,7 +278,7 @@ fi
 # ---------------------------------------------------------------------------
 # 2. Download the new gascan binary (OS auto-detect, both mirrors)
 # ---------------------------------------------------------------------------
-if ! skip_step 2; then
+if ! skip_step 2 "gascan ${EXPECT_GASCAN} binary"; then
   step 2 "Ensure gascan ${EXPECT_GASCAN} binary"
   expect "~/bin/gascan reports ${EXPECT_GASCAN} (download only if missing/mismatched)"
   cur_gascan=$(gascan --version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)
@@ -312,7 +312,7 @@ fi
 # ---------------------------------------------------------------------------
 # 3. Refresh inventory + GATE on target versions
 # ---------------------------------------------------------------------------
-if ! skip_step 3; then
+if ! skip_step 3 "inventory refresh + version GATE"; then
   step 3 "Refresh + verify inventory (GATE)"
   expect "gascan_version=${EXPECT_GASCAN}, tools_gas_version=${EXPECT_GASTOOLS}, pmm_version=${EXPECT_PMM}"
   # SN edits propagate with a lag (often minutes), so POLL the refreshed inventory until all three
@@ -374,7 +374,7 @@ fi
 # ---------------------------------------------------------------------------
 # 4. gas-tools
 # ---------------------------------------------------------------------------
-if ! skip_step 4; then
+if ! skip_step 4 "gas-tools ${EXPECT_GASTOOLS}"; then
   step 4 "Upgrade gas-tools to ${EXPECT_GASTOOLS}"
   expect "gas-tools --version reports ${EXPECT_GASTOOLS} (tools.yaml run only if mismatched)"
   cur_tools=$(gas-tools --version 2>/dev/null | grep -oE 'v[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)
@@ -406,7 +406,7 @@ fi
 # ---------------------------------------------------------------------------
 # 5. Alerting only (no server upgrade)
 # ---------------------------------------------------------------------------
-if ! skip_step 5; then
+if ! skip_step 5 "alerting update"; then
   step 5 "Update alerting (no server upgrade)"
   expect "pmm-server.yaml alerting run completes (~3-4 min); PLAY RECAP failed=0"
   pb=(--playbook pmm-server.yaml --limit=monitors --override=pmm_deploy_using=None)
@@ -420,7 +420,7 @@ fi
 # ---------------------------------------------------------------------------
 # 6. PMM server
 # ---------------------------------------------------------------------------
-if ! skip_step 6; then
+if ! skip_step 6 "PMM server ${EXPECT_PMM}"; then
   step 6 "Upgrade PMM server to ${EXPECT_PMM}"
   expect "pmm-server container running ${EXPECT_PMM} (pmm-server.yaml run only if mismatched)"
   cur_server=$(podman ps --format '{{.Image}}' 2>/dev/null | grep -i 'pmm-server' | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -n1 || true)
@@ -441,7 +441,7 @@ fi
 # ---------------------------------------------------------------------------
 # 7. PMM client
 # ---------------------------------------------------------------------------
-if ! skip_step 7; then
+if ! skip_step 7 "PMM clients ${EXPECT_PMM}"; then
   step 7 "Upgrade PMM clients"
   expect "all clients report pmm-admin ${EXPECT_PMM} (pmm-client.yaml run only if any lag)"
   cur_clients=$(gascan -adhoc -- mongodb,mysql,postgresql,ha,monitors -m shell -a '~/pmm/bin/pmm-admin version 2>/dev/null | grep "^Ver"' 2>/dev/null | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | sort -u | xargs || true)
@@ -481,7 +481,7 @@ fi
 # ---------------------------------------------------------------------------
 # 8. Done — manual tracker update
 # ---------------------------------------------------------------------------
-if ! skip_step 8; then
+if ! skip_step 8 "wrap-up"; then
   step 8 "Done"
   ok "upgrade sequence complete"
   note "MANUAL: update the PMM tracker -> $(hlink "https://docs.google.com/spreadsheets/d/1Hylu_DSw5YJYBPZbJmajSjTCitN4gm7XllriOCp9jTI/edit?gid=1362692116#gid=1362692116")"
