@@ -103,9 +103,13 @@ run_playbook() {
   local stepno="$1"; shift
   local log="/tmp/gascan-upgrade-${MON_ENV}-step${stepno}.log"
   local rc recap bad line ans
-  # pmm-client.yaml needs the monitor in any --limit (it templates client config from monitor facts)
+  # pmm-client.yaml needs the monitor in any --limit (it templates client config from monitor facts);
+  # playbooks already limited (--limit=monitors) just re-run as-is — no extra --limit.
   local lim="--limit=<host>"
-  case "$*" in *pmm-client.yaml*) lim="--limit=<host>,monitors" ;; esac
+  case "$*" in
+    *pmm-client.yaml*) lim="--limit=<host>,monitors" ;;
+    *--limit=*)        lim="" ;;
+  esac
   while :; do
     rc=0
     time gascan "$@" 2>&1 | tee "$log" || rc=$?
