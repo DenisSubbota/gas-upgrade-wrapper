@@ -115,7 +115,7 @@ your side. We'll confirm once complete.
 
 ## Playbooks
 
-> **If a playbook exits with an error:** judge by the PLAY RECAP per host, not gascan’s exit code (it is non-zero on any ansible issue). `unreachable=1` on one node → check it (`gascan -adhoc -- <host> -m ping` / `ssh <host>`); if the node is expectedly down (maintenance/decommission), continue the upgrade and re-run that playbook later with `--limit=<host>` (for `pmm-client.yaml` always include the monitor: `--limit=<host>,monitors`); a transient blip → just re-run the playbook (completed hosts re-converge fast). `failed=1` → read that host’s task error before re-running. The `upgrade.sh` companion does this triage for you and pauses for a retry/continue/abort decision.
+> **If a playbook exits with an error:** judge by the PLAY RECAP per host, not gascan’s exit code (it is non-zero on any ansible issue). `unreachable=1` on one node → check it (`gascan -adhoc -- <host> -m ping` / `ssh <host>`); if the node is expectedly down (maintenance/decommission), continue the upgrade and re-run that playbook later with `--limit=<host>` (for `pmm-client.yaml` always include the monitor: `--limit=monitors,<host>`); a transient blip → just re-run the playbook (completed hosts re-converge fast). `failed=1` → read that host’s task error before re-running. The `upgrade.sh` companion does this triage for you and pauses for a retry/continue/abort decision.
 
 ### gas-tools
 

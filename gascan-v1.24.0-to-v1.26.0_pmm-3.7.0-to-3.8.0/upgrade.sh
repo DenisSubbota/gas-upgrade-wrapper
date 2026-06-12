@@ -107,7 +107,7 @@ run_playbook() {
   # playbooks already limited (--limit=monitors) just re-run as-is — no extra --limit.
   local lim="--limit=<host>"
   case "$*" in
-    *pmm-client.yaml*) lim="--limit=<host>,monitors" ;;
+    *pmm-client.yaml*) lim="--limit=monitors,<host>" ;;
     *--limit=*)        lim="" ;;
   esac
   while :; do
